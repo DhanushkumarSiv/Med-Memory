@@ -10,6 +10,24 @@ const riskDetector_1 = require("./riskDetector");
 function safeText(value, fallback = "Unknown") {
     return typeof value === "string" && value.trim().length > 0 ? value : fallback;
 }
+function toPayloadObject(rawPayload) {
+    if (typeof rawPayload === "string") {
+        try {
+            const parsed = JSON.parse(rawPayload);
+            if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                return parsed;
+            }
+            return {};
+        }
+        catch {
+            return {};
+        }
+    }
+    if (rawPayload && typeof rawPayload === "object" && !Array.isArray(rawPayload)) {
+        return rawPayload;
+    }
+    return {};
+}
 function buildFallbackAggregated(fhirRecords) {
     const conditions = [];
     const medications = [];
@@ -17,7 +35,7 @@ function buildFallbackAggregated(fhirRecords) {
     const allergies = [];
     const procedures = [];
     for (const row of fhirRecords) {
-        const payload = JSON.parse(row.payload);
+        const payload = toPayloadObject(row.payload);
         const status = safeText(payload.status, safeText(payload.clinicalStatus?.text, "active"));
         if (row.resourceType === "Condition") {
             conditions.push({
@@ -226,6 +244,79 @@ const CARDIAC_KEYWORDS = [
     "ldl",
 ];
 const REPORT_KEYWORDS = ["report", "scan", "result", "results", "imaging", "conclusion", "finding"];
+function inferQueryFocus(question) {
+    const normalized = question.toLowerCase();
+    const preferredTypes = [];
+    const topicKeywords = [];
+    if (/(medication|medicine|drug|tablet|prescription)/.test(normalized)) {
+        preferredTypes.push("MedicationRequest");
+    }
+    if (/(allergy|allergic|reaction|anaphylaxis)/.test(normalized)) {
+        preferredTypes.push("AllergyIntolerance");
+    }
+    if (/(lab|result|value|test|scan|report|ecg|echo|imaging|finding)/.test(normalized)) {
+        preferredTypes.push("Observation", "DiagnosticReport");
+    }
+    if (/(condition|diagnosis|disease|problem|status|cardiac|heart|cardio|coronary|stent|hypertension)/.test(normalized)) {
+        preferredTypes.push("Condition");
+    }
+    if (/(cardiac|heart|cardio|coronary|stent|bp|hypertension|ecg|echo)/.test(normalized)) {
+        topicKeywords.push("cardiac", "heart", "cardio", "coronary", "stent", "hypertension", "ecg", "echo", "blood pressure");
+    }
+    if (/(renal|kidney|egfr|creatinine|ckd)/.test(normalized)) {
+        topicKeywords.push("renal", "kidney", "egfr", "creatinine", "ckd");
+    }
+    if (/(diabetes|hba1c|glucose|glycemic)/.test(normalized)) {
+        topicKeywords.push("diabetes", "hba1c", "glucose", "glycemic", "metformin", "empagliflozin");
+    }
+    return {
+        preferredTypes: Array.from(new Set(preferredTypes)),
+        topicKeywords: Array.from(new Set(topicKeywords)),
+    };
+}
+function scoreRecordsForQuery(question, records) {
+    const queryTokens = tokenize(question);
+    const queryIsCardiac = containsApproxKeyword(queryTokens, CARDIAC_KEYWORDS);
+    const queryRequestsReport = containsApproxKeyword(queryTokens, REPORT_KEYWORDS);
+    const focus = inferQueryFocus(question);
+    return records
+        .map((record) => {
+        const recordTokens = buildSearchTokens(record);
+        const recordTokenSet = new Set(recordTokens);
+        let score = 0;
+        for (const token of queryTokens) {
+            if (recordTokenSet.has(token)) {
+                score += 3;
+                continue;
+            }
+            if (recordTokens.some((candidate) => approximatelyMatches(token, candidate))) {
+                score += 2;
+            }
+        }
+        if (queryIsCardiac && containsApproxKeyword(recordTokens, CARDIAC_KEYWORDS)) {
+            score += 4;
+        }
+        const resourceType = String(record.resourceType ?? "");
+        if (queryRequestsReport && resourceType === "DiagnosticReport") {
+            score += 3;
+        }
+        if (focus.preferredTypes.length > 0 && focus.preferredTypes.includes(resourceType)) {
+            score += 3;
+        }
+        if (focus.topicKeywords.length > 0) {
+            const searchableText = `${getRecordSummary(record)} ${JSON.stringify(record.payload)}`.toLowerCase();
+            const topicHits = focus.topicKeywords.filter((keyword) => searchableText.includes(keyword)).length;
+            if (topicHits > 0) {
+                score += topicHits * 1.25;
+            }
+            else {
+                score -= 0.75;
+            }
+        }
+        return { record, score };
+    })
+        .sort((left, right) => right.score - left.score);
+}
 function containsApproxKeyword(tokens, keywords) {
     return tokens.some((token) => keywords.some((keyword) => approximatelyMatches(token, keyword) || token.includes(keyword)));
 }
@@ -309,31 +400,7 @@ function buildFallbackAnswer(question, relevant) {
 function buildFallbackRagResponse(question, records, ragError) {
     const queryTokens = tokenize(question);
     const queryIsCardiac = containsApproxKeyword(queryTokens, CARDIAC_KEYWORDS);
-    const queryRequestsReport = containsApproxKeyword(queryTokens, REPORT_KEYWORDS);
-    const scored = records
-        .map((record) => {
-        const recordTokens = buildSearchTokens(record);
-        const recordTokenSet = new Set(recordTokens);
-        let score = 0;
-        for (const token of queryTokens) {
-            if (recordTokenSet.has(token)) {
-                score += 3;
-                continue;
-            }
-            if (recordTokens.some((candidate) => approximatelyMatches(token, candidate))) {
-                score += 2;
-            }
-        }
-        if (queryIsCardiac && containsApproxKeyword(recordTokens, CARDIAC_KEYWORDS)) {
-            score += 4;
-        }
-        const resourceType = String(record.resourceType ?? "");
-        if (queryRequestsReport && resourceType === "DiagnosticReport") {
-            score += 3;
-        }
-        return { record, score };
-    })
-        .sort((left, right) => right.score - left.score);
+    const scored = scoreRecordsForQuery(question, records);
     let relevant = scored
         .filter((entry) => entry.score > 0)
         .slice(0, 6)
@@ -476,18 +543,29 @@ class AgentOrchestrator {
             resourceId: row.r.resourceId,
             recordedAt: row.r.recordedAt,
             sourceName: row.s.sourceName,
-            payload: JSON.parse(String(row.r.payload)),
+            payload: toPayloadObject(row.r.payload),
         }));
+        const ranked = scoreRecordsForQuery(question, records);
+        const selectedRecords = ranked.filter((entry) => entry.score > 0).slice(0, 8).map((entry) => entry.record);
+        const retrievalRecords = selectedRecords.length > 0 ? selectedRecords : ranked.slice(0, 8).map((entry) => entry.record);
         const payload = {
             question,
-            records,
+            retrievalMethod: "hybrid-keyword-semantic",
+            records: retrievalRecords.map((record) => ({
+                resourceType: record.resourceType,
+                resourceId: record.resourceId,
+                recordedAt: record.recordedAt,
+                sourceName: record.sourceName,
+                payload: record.payload,
+                summary: getRecordSummary(record),
+            })),
         };
         const ragResult = await this.ragMemory.run(payload);
         const ragData = ragResult.data;
         const hasUsableAnswer = typeof ragData?.answer === "string" && ragData.answer.trim().length > 0;
         const output = hasUsableAnswer
             ? normalizeRagOutput(ragData, ragResult.error ? `Model warning: ${ragResult.error}` : undefined)
-            : buildFallbackRagResponse(question, records, ragResult.error);
+            : buildFallbackRagResponse(question, retrievalRecords, ragResult.error);
         await storeAgentOutput(patientId, "ragMemory", output, ragResult.tokensUsed);
         return output;
     }

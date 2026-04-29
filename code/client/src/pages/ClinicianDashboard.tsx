@@ -26,6 +26,34 @@ function severityWeight(severity: string): number {
   }
 }
 
+interface LabFindingItem {
+  label: string;
+  value: string;
+}
+
+function parseRecentLabFindings(text: string): LabFindingItem[] {
+  const trimmed = text.trim();
+  if (!trimmed || !/^recent labs:/i.test(trimmed)) {
+    return [];
+  }
+
+  const body = trimmed.replace(/^recent labs:\s*/i, "");
+  return body
+    .split(";")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+    .map((item) => {
+      const separator = item.indexOf(":");
+      if (separator < 0) {
+        return { label: "Result", value: item };
+      }
+      return {
+        label: item.slice(0, separator).trim(),
+        value: item.slice(separator + 1).trim(),
+      };
+    });
+}
+
 export default function ClinicianDashboard(): JSX.Element {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -74,6 +102,8 @@ export default function ClinicianDashboard(): JSX.Element {
     () => [...(pipeline?.risks ?? [])].sort((a, b) => severityWeight(a.severity) - severityWeight(b.severity)).reverse(),
     [pipeline?.risks]
   );
+  const keyFindingsText = String(pipeline?.synthesis?.keyFindings ?? "No key findings.");
+  const recentLabFindings = useMemo(() => parseRecentLabFindings(keyFindingsText), [keyFindingsText]);
 
   if (!user || user.role !== "provider") {
     return (
@@ -147,8 +177,19 @@ export default function ClinicianDashboard(): JSX.Element {
                     <Badge key={problem} label={problem} tone="warning" />
                   ))}
                 </div>
-                <div className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-800">
-                  {String(pipeline?.synthesis?.keyFindings ?? "No key findings.")}
+                <div className="mt-3 rounded-lg bg-blue-50 p-3">
+                  {recentLabFindings.length > 0 ? (
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {recentLabFindings.map((item) => (
+                        <div key={item.label} className="rounded-md bg-white/70 p-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">{item.label}</p>
+                          <p className="text-sm font-semibold text-slate-900">{item.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-blue-800">{keyFindingsText}</p>
+                  )}
                 </div>
                 <p className="mt-3 text-sm text-slate-700">{String(pipeline?.synthesis?.longitudinalNarrative ?? "")}</p>
                 <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-slate-700">
