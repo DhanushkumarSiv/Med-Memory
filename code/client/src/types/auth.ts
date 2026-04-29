@@ -40,3 +40,10 @@ export interface ProviderSessionResponse {
   role: "provider";
   authorised: false;
 }
+
+export interface ProviderOtpRequestResponse {
+  otpSent: boolean;
+  maskedPhone: string;
+  expiresIn: number;
+  devOtp: string | null;
+}

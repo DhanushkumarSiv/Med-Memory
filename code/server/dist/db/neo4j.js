@@ -30,7 +30,8 @@ function toNative(value) {
 function getDriver() {
     if (!driver) {
         const username = process.env.NEO4J_USER ?? process.env.NEO4J_USERNAME ?? "neo4j";
-        driver = neo4j_driver_1.default.driver(process.env.NEO4J_URI ?? "bolt://localhost:7687", neo4j_driver_1.default.auth.basic(username, process.env.NEO4J_PASSWORD ?? ""));
+        const password = process.env.NEO4J_PASSWORD ?? "medmemory123";
+        driver = neo4j_driver_1.default.driver(process.env.NEO4J_URI ?? "bolt://localhost:7687", neo4j_driver_1.default.auth.basic(username, password));
     }
     return driver;
 }

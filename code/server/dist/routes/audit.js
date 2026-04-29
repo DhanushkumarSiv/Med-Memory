@@ -14,7 +14,6 @@ router.get("/:patientId", (0, consentGuard_1.consentGuard)("audit:read"), async 
       MATCH (:Patient {id: $patientId})-[:HAS_AUDIT_ENTRY]->(a:AuditEntry)
       RETURN a
       ORDER BY a.accessedAt DESC
-      LIMIT 100
       `, { patientId });
         res.json(rows.map((row) => row.a));
     }

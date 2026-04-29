@@ -1,17 +1,19 @@
-# MedMemory OS runtime requirements
+# MedMemory OS runtime requirements (non-Python project)
+
+# This repository does not use Python packages.
+# It runs on Node.js + Neo4j.
 
 # Core runtime
-Node.js>=18
+node>=18
 npm>=9
 
-# Database (choose one)
-Neo4j AuraDB (recommended)
-# OR local Neo4j 5.x (Docker optional)
+# Database
+neo4j>=5
 
 # Optional for local Neo4j setup
-Docker Desktop (optional)
+docker-desktop
 
-# Required environment variables (.env)
+# Required environment variables (.env in code/server)
 ANTHROPIC_API_KEY
 NEO4J_URI
 NEO4J_USER
@@ -23,5 +25,6 @@ OTP_EXPIRY_MINUTES
 PORT
 NODE_ENV
 
-# Install project dependencies
-# npm install
+# Install dependencies
+# cd code/server && npm install
+# cd ../client && npm install

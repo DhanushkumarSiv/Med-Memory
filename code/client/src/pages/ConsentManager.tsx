@@ -21,11 +21,48 @@ export default function ConsentManager({ patientIdOverride }: ConsentManagerProp
   const [providerType, setProviderType] = useState("clinician");
   const [expiresAt, setExpiresAt] = useState("");
   const [scopes, setScopes] = useState<string[]>(["patient:read", "patient:fhir"]);
+  const [accessView, setAccessView] = useState<"granted" | "revoked">("granted");
 
   const scopeOptions = useMemo(
     () => ["patient:read", "patient:fhir", "patient:run-pipeline", "patient:query", "consent:read", "audit:read"],
     []
   );
+  const grantedTokens = useMemo(() => tokens.filter((token) => !token.revokedAt), [tokens]);
+  const revokedTokens = useMemo(() => tokens.filter((token) => Boolean(token.revokedAt)), [tokens]);
+  const visibleTokens = accessView === "granted" ? grantedTokens : revokedTokens;
+  const recentAudit = useMemo(() => audit.slice(0, 10), [audit]);
+
+  const downloadAuditCsv = (): void => {
+    const csvEscape = (value: unknown): string => {
+      const text = String(value ?? "");
+      if (text.includes(",") || text.includes("\"") || text.includes("\n")) {
+        return `"${text.replace(/"/g, "\"\"")}"`;
+      }
+      return text;
+    };
+
+    const headers = ["id", "accessor", "action", "resourceAccessed", "consentTokenUsed", "accessedAt"];
+    const rows = audit.map((entry) =>
+      [
+        entry.id,
+        entry.accessor,
+        entry.action,
+        entry.resourceAccessed,
+        entry.consentTokenUsed,
+        entry.accessedAt,
+      ].map((field) => csvEscape(field)).join(",")
+    );
+    const csvContent = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `medmemory-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
 
   const onGrant = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
@@ -40,11 +77,29 @@ export default function ConsentManager({ patientIdOverride }: ConsentManagerProp
     <div className="space-y-6">
       <Card>
         <h2 className="mb-4 text-lg font-semibold text-slate-900">Who can see my records</h2>
-        {tokens.length === 0 ? (
-          <p className="text-sm text-slate-500">No active consent tokens.</p>
+        <div className="mb-4 flex flex-wrap gap-2">
+          <Button
+            variant={accessView === "granted" ? "primary" : "secondary"}
+            size="sm"
+            onClick={() => setAccessView("granted")}
+          >
+            Granted Access ({grantedTokens.length})
+          </Button>
+          <Button
+            variant={accessView === "revoked" ? "primary" : "secondary"}
+            size="sm"
+            onClick={() => setAccessView("revoked")}
+          >
+            Revoked Access ({revokedTokens.length})
+          </Button>
+        </div>
+        {visibleTokens.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            {accessView === "granted" ? "No granted access tokens." : "No revoked access tokens."}
+          </p>
         ) : (
           <div className="space-y-3">
-            {tokens.map((token) => (
+            {visibleTokens.map((token) => (
               <div key={token.id} className="rounded-lg border border-slate-200 p-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -54,8 +109,10 @@ export default function ConsentManager({ patientIdOverride }: ConsentManagerProp
                   <Badge label={token.providerType} tone="info" />
                 </div>
                 <p className="mt-2 text-xs text-slate-600">Scopes: {JSON.parse(token.scopes).join(", ")}</p>
-                {token.revokedAt ? (
-                  <p className="mt-1 text-xs text-red-600">Revoked at {new Date(token.revokedAt).toLocaleString()}</p>
+                {accessView === "revoked" ? (
+                  <p className="mt-1 text-xs text-red-600">
+                    Revoked at {token.revokedAt ? new Date(token.revokedAt).toLocaleString() : "-"}
+                  </p>
                 ) : (
                   <Button className="mt-3" variant="danger" size="sm" onClick={() => void revoke(token.id)}>
                     Revoke
@@ -145,14 +202,19 @@ export default function ConsentManager({ patientIdOverride }: ConsentManagerProp
       </Card>
 
       <Card>
-        <h2 className="mb-4 text-lg font-semibold text-slate-900">Audit log</h2>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold text-slate-900">Audit log (last 10)</h2>
+          <Button type="button" variant="secondary" size="sm" onClick={downloadAuditCsv} disabled={audit.length === 0}>
+            Download all audits (CSV)
+          </Button>
+        </div>
         {loading ? (
           <p className="text-sm text-slate-500">Loading audit entries...</p>
-        ) : audit.length === 0 ? (
+        ) : recentAudit.length === 0 ? (
           <p className="text-sm text-slate-500">No audit activity yet.</p>
         ) : (
           <div className="space-y-2">
-            {audit.map((entry) => (
+            {recentAudit.map((entry) => (
               <div key={entry.id} className="rounded-lg border border-slate-200 p-3 text-sm">
                 <p className="font-medium text-slate-900">{entry.accessor}</p>
                 <p className="text-slate-600">{entry.action}</p>

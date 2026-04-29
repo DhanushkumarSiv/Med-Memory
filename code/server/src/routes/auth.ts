@@ -66,7 +66,10 @@ function parseBearer(req: Request): string | null {
 }
 
 function verifyToken(token: string): TokenUser {
-  return jwt.verify(token, process.env.JWT_SECRET ?? "medmemory-dev-secret") as TokenUser;
+  return jwt.verify(
+    token,
+    process.env.JWT_SECRET ?? "medmemory-dev-secret",
+  ) as TokenUser;
 }
 
 function calcAge(dobIso: string): number {
@@ -91,9 +94,14 @@ async function ensureDemoSeedData(): Promise<void> {
 
 router.post("/patient/login", async (req: Request, res: Response) => {
   try {
-    const { abhaId, password } = req.body as { abhaId?: string; password?: string };
+    const { abhaId, password } = req.body as {
+      abhaId?: string;
+      password?: string;
+    };
     if (!abhaId || !password) {
-      return res.status(400).json({ message: "abhaId and password are required" });
+      return res
+        .status(400)
+        .json({ message: "abhaId and password are required" });
     }
     const normalizedAbhaId = abhaId.trim().toUpperCase();
 
@@ -103,11 +111,13 @@ router.post("/patient/login", async (req: Request, res: Response) => {
       RETURN p
       LIMIT 1
       `,
-      { abhaId: normalizedAbhaId }
+      { abhaId: normalizedAbhaId },
     );
 
     let patient = rows[0]?.p;
-    let isValid = patient ? await bcrypt.compare(password, String(patient.passwordHash)) : false;
+    let isValid = patient
+      ? await bcrypt.compare(password, String(patient.passwordHash))
+      : false;
 
     if (
       (!patient || !isValid) &&
@@ -121,17 +131,23 @@ router.post("/patient/login", async (req: Request, res: Response) => {
         RETURN p
         LIMIT 1
         `,
-        { abhaId: normalizedAbhaId }
+        { abhaId: normalizedAbhaId },
       );
       patient = rows[0]?.p;
-      isValid = patient ? await bcrypt.compare(password, String(patient.passwordHash)) : false;
+      isValid = patient
+        ? await bcrypt.compare(password, String(patient.passwordHash))
+        : false;
     }
 
     if (!patient || !isValid) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    const token = buildToken({ role: "patient", abhaId: normalizedAbhaId, patientId: patient.id });
+    const token = buildToken({
+      role: "patient",
+      abhaId: normalizedAbhaId,
+      patientId: patient.id,
+    });
     return res.json({
       token,
       role: "patient",
@@ -145,15 +161,25 @@ router.post("/patient/login", async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({ message: "Patient login failed", error: (error as Error).message });
+    return res
+      .status(500)
+      .json({
+        message: "Patient login failed",
+        error: (error as Error).message,
+      });
   }
 });
 
 router.post("/provider/login", async (req: Request, res: Response) => {
   try {
-    const { loginId, password } = req.body as { loginId?: string; password?: string };
+    const { loginId, password } = req.body as {
+      loginId?: string;
+      password?: string;
+    };
     if (!loginId || !password) {
-      return res.status(400).json({ message: "loginId and password are required" });
+      return res
+        .status(400)
+        .json({ message: "loginId and password are required" });
     }
     const normalizedLoginId = loginId.trim().toLowerCase();
 
@@ -164,11 +190,13 @@ router.post("/provider/login", async (req: Request, res: Response) => {
       RETURN pr
       LIMIT 1
       `,
-      { loginId: normalizedLoginId }
+      { loginId: normalizedLoginId },
     );
 
     let provider = rows[0]?.pr;
-    let isValid = provider ? await bcrypt.compare(password, String(provider.passwordHash)) : false;
+    let isValid = provider
+      ? await bcrypt.compare(password, String(provider.passwordHash))
+      : false;
 
     if (
       (!provider || !isValid) &&
@@ -183,10 +211,12 @@ router.post("/provider/login", async (req: Request, res: Response) => {
         RETURN pr
         LIMIT 1
         `,
-        { loginId: normalizedLoginId }
+        { loginId: normalizedLoginId },
       );
       provider = rows[0]?.pr;
-      isValid = provider ? await bcrypt.compare(password, String(provider.passwordHash)) : false;
+      isValid = provider
+        ? await bcrypt.compare(password, String(provider.passwordHash))
+        : false;
     }
 
     if (!provider || !isValid) {
@@ -201,9 +231,18 @@ router.post("/provider/login", async (req: Request, res: Response) => {
       authorised: false,
     });
 
-    return res.json({ providerSessionToken, role: "provider", authorised: false });
+    return res.json({
+      providerSessionToken,
+      role: "provider",
+      authorised: false,
+    });
   } catch (error) {
-    return res.status(500).json({ message: "Provider login failed", error: (error as Error).message });
+    return res
+      .status(500)
+      .json({
+        message: "Provider login failed",
+        error: (error as Error).message,
+      });
   }
 });
 
@@ -230,7 +269,7 @@ router.post("/provider/lookup-patient", async (req: Request, res: Response) => {
       RETURN p
       LIMIT 1
       `,
-      { abhaId }
+      { abhaId },
     );
 
     const patient = rows[0]?.p;
@@ -247,7 +286,9 @@ router.post("/provider/lookup-patient", async (req: Request, res: Response) => {
       abhaId: patient.abhaId,
     });
   } catch (error) {
-    return res.status(500).json({ message: "Lookup failed", error: (error as Error).message });
+    return res
+      .status(500)
+      .json({ message: "Lookup failed", error: (error as Error).message });
   }
 });
 
@@ -274,7 +315,7 @@ router.post("/provider/request-otp", async (req: Request, res: Response) => {
       RETURN p
       LIMIT 1
       `,
-      { patientId }
+      { patientId },
     );
 
     const patient = rows[0]?.p;
@@ -283,19 +324,28 @@ router.post("/provider/request-otp", async (req: Request, res: Response) => {
     }
 
     const otp = generateOtp();
-    await createOtpRecord(patientId, String(patient.phone), otp, "provider-access-consent", {
-      providerId: payload.providerId,
-      providerName: payload.providerName,
-    });
+    await createOtpRecord(
+      patientId,
+      String(patient.phone),
+      otp,
+      "provider-access-consent",
+      {
+        providerId: payload.providerId,
+        providerName: payload.providerName,
+      },
+    );
     await sendOtp(String(patient.phone), otp);
 
     return res.json({
       otpSent: true,
       maskedPhone: maskedPhone(String(patient.phone)),
       expiresIn: Number(process.env.OTP_EXPIRY_MINUTES ?? "5") * 60,
+      devOtp: process.env.NODE_ENV === "production" ? null : getLastDevOtp(),
     });
   } catch (error) {
-    return res.status(500).json({ message: "OTP request failed", error: (error as Error).message });
+    return res
+      .status(500)
+      .json({ message: "OTP request failed", error: (error as Error).message });
   }
 });
 
@@ -307,16 +357,26 @@ router.post("/provider/verify-otp", async (req: Request, res: Response) => {
     }
 
     const payload = verifyToken(token);
-    if (payload.role !== "provider" || !payload.providerId || !payload.providerName) {
+    if (
+      payload.role !== "provider" ||
+      !payload.providerId ||
+      !payload.providerName
+    ) {
       return res.status(403).json({ message: "Only provider session allowed" });
     }
 
     const { patientId, otp } = req.body as { patientId?: string; otp?: string };
     if (!patientId || !otp) {
-      return res.status(400).json({ message: "patientId and otp are required" });
+      return res
+        .status(400)
+        .json({ message: "patientId and otp are required" });
     }
 
-    const verification = await verifyOtp(patientId, otp, "provider-access-consent");
+    const verification = await verifyOtp(
+      patientId,
+      otp,
+      "provider-access-consent",
+    );
     if (!verification.valid) {
       const reasonMap: Record<string, string> = {
         otp_not_found: "No pending OTP found",
@@ -324,7 +384,12 @@ router.post("/provider/verify-otp", async (req: Request, res: Response) => {
         otp_invalid: "Invalid OTP",
         otp_too_many_attempts: "OTP invalidated after 3 failed attempts",
       };
-      return res.status(401).json({ message: reasonMap[verification.reason ?? ""] ?? "OTP verification failed" });
+      return res
+        .status(401)
+        .json({
+          message:
+            reasonMap[verification.reason ?? ""] ?? "OTP verification failed",
+        });
     }
 
     const consentRows = await runQuery<{ c: Record<string, unknown> }>(
@@ -339,7 +404,7 @@ router.post("/provider/verify-otp", async (req: Request, res: Response) => {
         patientId,
         providerId: payload.providerId,
         nowIso: new Date().toISOString(),
-      }
+      },
     );
 
     let consentToken = consentRows[0]?.c?.token as string | undefined;
@@ -349,7 +414,9 @@ router.post("/provider/verify-otp", async (req: Request, res: Response) => {
       consentToken = uuidv4();
       const consentId = uuidv4();
       const now = new Date();
-      const expiresAt = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString();
+      const expiresAt = new Date(
+        now.getTime() + 8 * 60 * 60 * 1000,
+      ).toISOString();
       scopes = [...defaultScopes];
 
       await runQuery(
@@ -379,7 +446,7 @@ router.post("/provider/verify-otp", async (req: Request, res: Response) => {
           scopes: JSON.stringify(scopes),
           grantedAt: now.toISOString(),
           expiresAt,
-        }
+        },
       );
     } else {
       const scopeString = consentRows[0]?.c?.scopes as string | undefined;
@@ -418,7 +485,7 @@ router.post("/provider/verify-otp", async (req: Request, res: Response) => {
         resourceAccessed: patientId,
         consentTokenUsed: consentToken,
         accessedAt: new Date().toISOString(),
-      }
+      },
     );
 
     return res.json({
@@ -429,7 +496,12 @@ router.post("/provider/verify-otp", async (req: Request, res: Response) => {
       scopes,
     });
   } catch (error) {
-    return res.status(500).json({ message: "OTP verification failed", error: (error as Error).message });
+    return res
+      .status(500)
+      .json({
+        message: "OTP verification failed",
+        error: (error as Error).message,
+      });
   }
 });
 
@@ -446,12 +518,14 @@ router.get("/me", (req: Request, res: Response) => {
     const payload = verifyToken(token);
     return res.json(payload);
   } catch (error) {
-    return res.status(401).json({ message: "Invalid token", error: (error as Error).message });
+    return res
+      .status(401)
+      .json({ message: "Invalid token", error: (error as Error).message });
   }
 });
 
 router.get("/dev/last-otp", (_req: Request, res: Response) => {
-  if (process.env.NODE_ENV !== "development") {
+  if (process.env.NODE_ENV === "production") {
     return res.status(404).json({ message: "Not found" });
   }
 
