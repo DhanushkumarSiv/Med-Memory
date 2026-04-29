@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # MedMemory OS
 
 **Tagline:** The AI brain for fragmented health records
@@ -198,3 +199,6 @@ Records are stored as full JSON payload strings in Neo4j, preserving schema fide
 ---
 
 Built for hackathon speed with production-minded architecture boundaries.
+=======
+# Med-Memory
+>>>>>>> 860a0f9f9ebb00780ee05ba08ca6d5eb2683c3b9
