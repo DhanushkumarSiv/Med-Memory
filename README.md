@@ -39,7 +39,21 @@ Med-Memory/
 - API health check (local): `http://localhost:4000/health`
 
 ## Architecture diagram (Mermaid)
-![alt text](mermaid-diagram-2026-04-29T21-13-27.png)
+```mermaid
+flowchart LR
+    A["Patient App (React/Vite)"] --> B["Express API (TypeScript)"]
+    C["Clinician Dashboard (React/Vite)"] --> B
+    B --> D["Neo4j (Patient, Consent, Audit, FHIR Graph)"]
+    B --> E["AI Agent Orchestrator"]
+    E --> F["Record Aggregator Agent"]
+    E --> G["Clinical Synthesizer Agent"]
+    E --> H["Risk Detector Agent"]
+    E --> I["RAG Memory Agent"]
+    I --> D
+    I --> J["Groq API (LLM Generation)"]
+    B --> K["Consent + OTP Guardrails"]
+
+```
 
 ## Dockerization
 This project is container-friendly via `docker-compose.yml` and is designed to run frontend, backend, and Neo4j together.
