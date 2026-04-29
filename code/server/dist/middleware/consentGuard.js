@@ -3,6 +3,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.consentGuard = consentGuard;
 const uuid_1 = require("uuid");
 const neo4j_1 = require("../db/neo4j");
+function isDbUnavailableError(error) {
+    const message = error?.message?.toLowerCase() ?? "";
+    return message.includes("failed to connect to server") || message.includes("serviceunavailable");
+}
 function resolvePatientId(req) {
     const rawParam = req.params.id ?? req.params.patientId;
     const fromParams = typeof rawParam === "string" ? rawParam : null;
@@ -28,25 +32,32 @@ function consentGuard(requiredScope) {
                     res.status(403).json({ message: "Patients can only access their own records" });
                     return;
                 }
-                await (0, neo4j_1.runQuery)(`
-          MATCH (p:Patient {id: $patientId})
-          CREATE (a:AuditEntry {
-            id: $id,
-            accessor: $accessor,
-            action: $action,
-            resourceAccessed: $resourceAccessed,
-            consentTokenUsed: '',
-            accessedAt: $accessedAt
-          })
-          MERGE (p)-[:HAS_AUDIT_ENTRY]->(a)
-          `, {
-                    patientId,
-                    id: (0, uuid_1.v4)(),
-                    accessor: user.abhaId ?? "patient-self",
-                    action: "patient-self-access",
-                    resourceAccessed: `${req.method} ${req.originalUrl}`,
-                    accessedAt: new Date().toISOString(),
-                });
+                try {
+                    await (0, neo4j_1.runQuery)(`
+            MATCH (p:Patient {id: $patientId})
+            CREATE (a:AuditEntry {
+              id: $id,
+              accessor: $accessor,
+              action: $action,
+              resourceAccessed: $resourceAccessed,
+              consentTokenUsed: '',
+              accessedAt: $accessedAt
+            })
+            MERGE (p)-[:HAS_AUDIT_ENTRY]->(a)
+            `, {
+                        patientId,
+                        id: (0, uuid_1.v4)(),
+                        accessor: user.abhaId ?? "patient-self",
+                        action: "patient-self-access",
+                        resourceAccessed: `${req.method} ${req.originalUrl}`,
+                        accessedAt: new Date().toISOString(),
+                    });
+                }
+                catch (error) {
+                    if (!isDbUnavailableError(error)) {
+                        throw error;
+                    }
+                }
                 next();
                 return;
             }

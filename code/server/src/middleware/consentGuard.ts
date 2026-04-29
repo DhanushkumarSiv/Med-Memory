@@ -3,6 +3,11 @@ import { v4 as uuidv4 } from "uuid";
 import { runQuery } from "../db/neo4j";
 import { AuthUser } from "../types/auth";
 
+function isDbUnavailableError(error: unknown): boolean {
+  const message = (error as Error)?.message?.toLowerCase() ?? "";
+  return message.includes("failed to connect to server") || message.includes("serviceunavailable");
+}
+
 function resolvePatientId(req: Request): string | null {
   const rawParam = req.params.id ?? req.params.patientId;
   const fromParams = typeof rawParam === "string" ? rawParam : null;
@@ -32,28 +37,34 @@ export function consentGuard(requiredScope: string) {
           return;
         }
 
-        await runQuery(
-          `
-          MATCH (p:Patient {id: $patientId})
-          CREATE (a:AuditEntry {
-            id: $id,
-            accessor: $accessor,
-            action: $action,
-            resourceAccessed: $resourceAccessed,
-            consentTokenUsed: '',
-            accessedAt: $accessedAt
-          })
-          MERGE (p)-[:HAS_AUDIT_ENTRY]->(a)
-          `,
-          {
-            patientId,
-            id: uuidv4(),
-            accessor: user.abhaId ?? "patient-self",
-            action: "patient-self-access",
-            resourceAccessed: `${req.method} ${req.originalUrl}`,
-            accessedAt: new Date().toISOString(),
+        try {
+          await runQuery(
+            `
+            MATCH (p:Patient {id: $patientId})
+            CREATE (a:AuditEntry {
+              id: $id,
+              accessor: $accessor,
+              action: $action,
+              resourceAccessed: $resourceAccessed,
+              consentTokenUsed: '',
+              accessedAt: $accessedAt
+            })
+            MERGE (p)-[:HAS_AUDIT_ENTRY]->(a)
+            `,
+            {
+              patientId,
+              id: uuidv4(),
+              accessor: user.abhaId ?? "patient-self",
+              action: "patient-self-access",
+              resourceAccessed: `${req.method} ${req.originalUrl}`,
+              accessedAt: new Date().toISOString(),
+            }
+          );
+        } catch (error) {
+          if (!isDbUnavailableError(error)) {
+            throw error;
           }
-        );
+        }
 
         next();
         return;

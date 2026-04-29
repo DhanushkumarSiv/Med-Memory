@@ -37,7 +37,23 @@ export function useServiceHealth(): {
         signal: controller.signal,
       });
 
+      const payload = (await response.json().catch(() => ({}))) as {
+        api?: { up?: boolean };
+        neo4j?: { up?: boolean };
+        status?: string;
+      };
+      const apiUp = payload.api?.up !== false;
+      const neo4jUp = payload.neo4j?.up === true;
+
       if (!response.ok) {
+        if (apiUp && !neo4jUp) {
+          setHealth({
+            state: "neo4j-down",
+            message: "Neo4j database is down or unreachable.",
+            checkedAt: new Date().toISOString(),
+          });
+          return;
+        }
         setHealth({
           state: "api-down",
           message: "API is reachable but returned an unhealthy response.",
@@ -45,13 +61,6 @@ export function useServiceHealth(): {
         });
         return;
       }
-
-      const payload = (await response.json()) as {
-        api?: { up?: boolean };
-        neo4j?: { up?: boolean };
-      };
-      const apiUp = payload.api?.up !== false;
-      const neo4jUp = payload.neo4j?.up === true;
 
       if (!apiUp) {
         setHealth({

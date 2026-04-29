@@ -4,6 +4,7 @@ import jwt, { JwtPayload, SignOptions } from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
 import { runQuery } from "../db/neo4j";
 import { seedGraph } from "../db/seed";
+import { getOfflinePatientByAbhaId } from "../fhir/offlineDemo";
 import {
   createOtpRecord,
   generateOtp,
@@ -40,6 +41,11 @@ const DEMO_PATIENT_ABHA = "ABHA-1001-2024";
 const DEMO_PATIENT_PASSWORD = "Demo@1234";
 const DEMO_PROVIDER_LOGIN = "dr.meera@medmemory.in";
 const DEMO_PROVIDER_PASSWORD = "Doctor@1234";
+
+function isDbUnavailableError(error: unknown): boolean {
+  const message = (error as Error)?.message?.toLowerCase() ?? "";
+  return message.includes("failed to connect to server") || message.includes("serviceunavailable");
+}
 
 function buildToken(payload: Record<string, unknown>): string {
   const options: SignOptions = {
@@ -161,6 +167,35 @@ router.post("/patient/login", async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
+    const { abhaId, password } = req.body as { abhaId?: string; password?: string };
+    const normalizedAbhaId = String(abhaId ?? "").trim().toUpperCase();
+    if (
+      isDbUnavailableError(error) &&
+      normalizedAbhaId === DEMO_PATIENT_ABHA &&
+      password === DEMO_PATIENT_PASSWORD
+    ) {
+      const offlinePatient = getOfflinePatientByAbhaId(normalizedAbhaId);
+      if (offlinePatient) {
+        const token = buildToken({
+          role: "patient",
+          abhaId: normalizedAbhaId,
+          patientId: offlinePatient.id,
+        });
+        return res.json({
+          token,
+          role: "patient",
+          patient: {
+            id: offlinePatient.id,
+            name: offlinePatient.name,
+            abhaId: offlinePatient.abhaId,
+            dob: offlinePatient.dob,
+            gender: offlinePatient.gender,
+            phone: maskedPhone(String(offlinePatient.phone)),
+          },
+        });
+      }
+    }
+
     return res
       .status(500)
       .json({
@@ -237,6 +272,27 @@ router.post("/provider/login", async (req: Request, res: Response) => {
       authorised: false,
     });
   } catch (error) {
+    const { loginId, password } = req.body as { loginId?: string; password?: string };
+    const normalizedLoginId = String(loginId ?? "").trim().toLowerCase();
+    if (
+      isDbUnavailableError(error) &&
+      normalizedLoginId === DEMO_PROVIDER_LOGIN &&
+      password === DEMO_PROVIDER_PASSWORD
+    ) {
+      const providerSessionToken = buildToken({
+        role: "provider",
+        providerId: "provider-dr-meera",
+        providerName: "Dr. Meera Pillai",
+        providerType: "clinician",
+        authorised: false,
+      });
+      return res.json({
+        providerSessionToken,
+        role: "provider",
+        authorised: false,
+      });
+    }
+
     return res
       .status(500)
       .json({
