@@ -7,6 +7,7 @@ exports.getDriver = getDriver;
 exports.runQuery = runQuery;
 exports.initConstraints = initConstraints;
 exports.closeDriver = closeDriver;
+exports.checkNeo4jHealth = checkNeo4jHealth;
 const neo4j_driver_1 = __importDefault(require("neo4j-driver"));
 let driver;
 function toNative(value) {
@@ -30,7 +31,8 @@ function toNative(value) {
 function getDriver() {
     if (!driver) {
         const username = process.env.NEO4J_USER ?? process.env.NEO4J_USERNAME ?? "neo4j";
-        driver = neo4j_driver_1.default.driver(process.env.NEO4J_URI ?? "bolt://localhost:7687", neo4j_driver_1.default.auth.basic(username, process.env.NEO4J_PASSWORD ?? ""));
+        const password = process.env.NEO4J_PASSWORD ?? "medmemory123";
+        driver = neo4j_driver_1.default.driver(process.env.NEO4J_URI ?? "bolt://localhost:7687", neo4j_driver_1.default.auth.basic(username, password));
     }
     return driver;
 }
@@ -65,5 +67,15 @@ async function closeDriver() {
     if (driver) {
         await driver.close();
         driver = undefined;
+    }
+}
+async function checkNeo4jHealth() {
+    try {
+        await getDriver().verifyConnectivity();
+        await runQuery("RETURN 1 AS ok");
+        return { up: true };
+    }
+    catch (error) {
+        return { up: false, error: error.message };
     }
 }

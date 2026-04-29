@@ -10,7 +10,7 @@ import auditRoutes from "./routes/audit";
 import agentRoutes from "./routes/agents";
 import emergencyRoutes from "./routes/emergency";
 import { authMiddleware } from "./middleware/authMiddleware";
-import { initConstraints } from "./db/neo4j";
+import { checkNeo4jHealth, initConstraints } from "./db/neo4j";
 import { seedGraph } from "./db/seed";
 
 const app = express();
@@ -21,6 +21,20 @@ app.use(express.json());
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "MedMemory OS API" });
+});
+
+app.get("/health/services", async (_req, res) => {
+  const neo4j = await checkNeo4jHealth();
+  const status = neo4j.up ? "ok" : "degraded";
+  res.status(neo4j.up ? 200 : 503).json({
+    status,
+    api: { up: true },
+    neo4j: {
+      up: neo4j.up,
+      error: neo4j.error ?? null,
+    },
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.use("/api/v1/auth", authRoutes);

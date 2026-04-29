@@ -24,6 +24,19 @@ app.use(express_1.default.json());
 app.get("/health", (_req, res) => {
     res.json({ status: "ok", service: "MedMemory OS API" });
 });
+app.get("/health/services", async (_req, res) => {
+    const neo4j = await (0, neo4j_1.checkNeo4jHealth)();
+    const status = neo4j.up ? "ok" : "degraded";
+    res.status(neo4j.up ? 200 : 503).json({
+        status,
+        api: { up: true },
+        neo4j: {
+            up: neo4j.up,
+            error: neo4j.error ?? null,
+        },
+        timestamp: new Date().toISOString(),
+    });
+});
 app.use("/api/v1/auth", auth_1.default);
 app.use("/api/v1/fhir", fhir_1.default);
 app.use("/api/v1/emergency", emergency_1.default);

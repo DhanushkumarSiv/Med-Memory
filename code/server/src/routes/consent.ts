@@ -9,6 +9,7 @@ const router = express.Router();
 router.get("/:patientId", consentGuard("consent:read"), async (req: Request, res: Response) => {
   try {
     const patientId = String(req.params.patientId ?? "");
+
     const rows = await runQuery<{ c: Record<string, unknown> }>(
       `
       MATCH (:Patient {id: $patientId})-[:GRANTED_ACCESS_TO]->(c:ConsentToken)

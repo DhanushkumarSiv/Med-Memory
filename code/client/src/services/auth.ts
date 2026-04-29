@@ -1,5 +1,11 @@
 import api from "./api";
-import { AuthResponse, PatientLoginRequest, ProviderLoginRequest, ProviderSessionResponse } from "../types/auth";
+import {
+  AuthResponse,
+  PatientLoginRequest,
+  ProviderLoginRequest,
+  ProviderOtpRequestResponse,
+  ProviderSessionResponse,
+} from "../types/auth";
 
 export async function patientLogin(payload: PatientLoginRequest): Promise<AuthResponse> {
   const response = await api.post<AuthResponse>("/auth/patient/login", payload);
@@ -20,13 +26,16 @@ export async function providerLookupPatient(providerSessionToken: string, abhaId
   return response.data as Record<string, unknown>;
 }
 
-export async function requestProviderOtp(providerSessionToken: string, patientId: string): Promise<Record<string, unknown>> {
-  const response = await api.post(
+export async function requestProviderOtp(
+  providerSessionToken: string,
+  patientId: string
+): Promise<ProviderOtpRequestResponse> {
+  const response = await api.post<ProviderOtpRequestResponse>(
     "/auth/provider/request-otp",
     { patientId },
     { headers: { Authorization: `Bearer ${providerSessionToken}` } }
   );
-  return response.data as Record<string, unknown>;
+  return response.data;
 }
 
 export async function verifyProviderOtp(

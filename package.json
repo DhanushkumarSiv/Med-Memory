@@ -3,15 +3,17 @@
   "private": true,
   "version": "1.0.0",
   "workspaces": [
-    "client",
-    "server"
+    "code/client",
+    "code/server"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev --workspace server\" \"npm run dev --workspace client\"",
-    "dev:server": "npm run dev --workspace server",
-    "dev:client": "npm run dev --workspace client",
-    "build": "npm run build --workspace server && npm run build --workspace client",
-    "seed": "npm run seed --workspace server"
+    "dev": "concurrently \"npm run dev --workspace code/server\" \"npm run dev --workspace code/client\"",
+    "dev:all": "docker compose up --build",
+    "dev:stack": "start.bat",
+    "dev:server": "npm run dev --workspace code/server",
+    "dev:client": "npm run dev --workspace code/client",
+    "build": "npm run build --workspace code/server && npm run build --workspace code/client",
+    "seed": "npm run seed --workspace code/server"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

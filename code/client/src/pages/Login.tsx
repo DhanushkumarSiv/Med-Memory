@@ -17,12 +17,12 @@ import {
   verifyProviderOtp,
 } from "../services/auth";
 
-function resolveApiErrorMessage(err: unknown): string {
+function resolveApiErrorMessage(err: unknown): string | null {
   const responseMessage = (err as { response?: { data?: { message?: string } } }).response?.data?.message;
   if (responseMessage) {
     return responseMessage;
   }
-  return "Unable to reach MedMemory API. Check if server and Neo4j are running.";
+  return null;
 }
 
 export default function Login(): JSX.Element {
@@ -50,11 +50,14 @@ export default function Login(): JSX.Element {
     if (role !== "provider" || providerStep !== 3) {
       return;
     }
+    if (devOtp) {
+      return;
+    }
 
     void getDevLastOtp()
       .then((otp) => setDevOtp(otp))
-      .catch(() => setDevOtp(null));
-  }, [providerStep, role]);
+      .catch(() => undefined);
+  }, [providerStep, role, devOtp]);
 
   const onPatientLogin = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
@@ -74,7 +77,8 @@ export default function Login(): JSX.Element {
       });
       navigate("/patient");
     } catch (err) {
-      setError(resolveApiErrorMessage(err));
+      const message = resolveApiErrorMessage(err);
+      setError(message ?? "");
     } finally {
       setLoading(false);
     }
@@ -93,7 +97,8 @@ export default function Login(): JSX.Element {
       setProviderSessionToken(response.providerSessionToken);
       setProviderStep(2);
     } catch (err) {
-      setError(resolveApiErrorMessage(err));
+      const message = resolveApiErrorMessage(err);
+      setError(message ?? "");
     } finally {
       setLoading(false);
     }
@@ -112,7 +117,8 @@ export default function Login(): JSX.Element {
       const data = await providerLookupPatient(providerSessionToken, lookupAbhaId);
       setPatientLookup(data);
     } catch (err) {
-      setError(resolveApiErrorMessage(err));
+      const message = resolveApiErrorMessage(err);
+      setError(message ?? "");
     } finally {
       setLoading(false);
     }
@@ -129,11 +135,21 @@ export default function Login(): JSX.Element {
     try {
       const response = await requestProviderOtp(providerSessionToken, String(patientLookup.patientId));
       setOtpExpiry(Number(response.expiresIn ?? 300));
-      const otp = await getDevLastOtp();
-      setDevOtp(otp);
+      if (response.devOtp) {
+        setDevOtp(response.devOtp);
+      } else {
+        // Dev OTP fetch is best-effort; production may return 404.
+        try {
+          const otp = await getDevLastOtp();
+          setDevOtp(otp);
+        } catch {
+          setDevOtp(null);
+        }
+      }
       setProviderStep(3);
     } catch (err) {
-      setError(resolveApiErrorMessage(err));
+      const message = resolveApiErrorMessage(err);
+      setError(message ?? "");
     } finally {
       setLoading(false);
     }
@@ -158,7 +174,8 @@ export default function Login(): JSX.Element {
       });
       navigate("/clinician");
     } catch (err) {
-      setError(resolveApiErrorMessage(err));
+      const message = resolveApiErrorMessage(err);
+      setError(message ?? "");
     } finally {
       setLoading(false);
     }

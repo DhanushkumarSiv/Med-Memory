@@ -70,7 +70,9 @@ router.post("/patient/login", async (req, res) => {
     try {
         const { abhaId, password } = req.body;
         if (!abhaId || !password) {
-            return res.status(400).json({ message: "abhaId and password are required" });
+            return res
+                .status(400)
+                .json({ message: "abhaId and password are required" });
         }
         const normalizedAbhaId = abhaId.trim().toUpperCase();
         let rows = await (0, neo4j_1.runQuery)(`
@@ -79,7 +81,9 @@ router.post("/patient/login", async (req, res) => {
       LIMIT 1
       `, { abhaId: normalizedAbhaId });
         let patient = rows[0]?.p;
-        let isValid = patient ? await bcrypt_1.default.compare(password, String(patient.passwordHash)) : false;
+        let isValid = patient
+            ? await bcrypt_1.default.compare(password, String(patient.passwordHash))
+            : false;
         if ((!patient || !isValid) &&
             normalizedAbhaId === DEMO_PATIENT_ABHA &&
             password === DEMO_PATIENT_PASSWORD) {
@@ -90,12 +94,18 @@ router.post("/patient/login", async (req, res) => {
         LIMIT 1
         `, { abhaId: normalizedAbhaId });
             patient = rows[0]?.p;
-            isValid = patient ? await bcrypt_1.default.compare(password, String(patient.passwordHash)) : false;
+            isValid = patient
+                ? await bcrypt_1.default.compare(password, String(patient.passwordHash))
+                : false;
         }
         if (!patient || !isValid) {
             return res.status(401).json({ message: "Invalid credentials" });
         }
-        const token = buildToken({ role: "patient", abhaId: normalizedAbhaId, patientId: patient.id });
+        const token = buildToken({
+            role: "patient",
+            abhaId: normalizedAbhaId,
+            patientId: patient.id,
+        });
         return res.json({
             token,
             role: "patient",
@@ -110,14 +120,21 @@ router.post("/patient/login", async (req, res) => {
         });
     }
     catch (error) {
-        return res.status(500).json({ message: "Patient login failed", error: error.message });
+        return res
+            .status(500)
+            .json({
+            message: "Patient login failed",
+            error: error.message,
+        });
     }
 });
 router.post("/provider/login", async (req, res) => {
     try {
         const { loginId, password } = req.body;
         if (!loginId || !password) {
-            return res.status(400).json({ message: "loginId and password are required" });
+            return res
+                .status(400)
+                .json({ message: "loginId and password are required" });
         }
         const normalizedLoginId = loginId.trim().toLowerCase();
         let rows = await (0, neo4j_1.runQuery)(`
@@ -127,7 +144,9 @@ router.post("/provider/login", async (req, res) => {
       LIMIT 1
       `, { loginId: normalizedLoginId });
         let provider = rows[0]?.pr;
-        let isValid = provider ? await bcrypt_1.default.compare(password, String(provider.passwordHash)) : false;
+        let isValid = provider
+            ? await bcrypt_1.default.compare(password, String(provider.passwordHash))
+            : false;
         if ((!provider || !isValid) &&
             normalizedLoginId === DEMO_PROVIDER_LOGIN &&
             password === DEMO_PROVIDER_PASSWORD) {
@@ -139,7 +158,9 @@ router.post("/provider/login", async (req, res) => {
         LIMIT 1
         `, { loginId: normalizedLoginId });
             provider = rows[0]?.pr;
-            isValid = provider ? await bcrypt_1.default.compare(password, String(provider.passwordHash)) : false;
+            isValid = provider
+                ? await bcrypt_1.default.compare(password, String(provider.passwordHash))
+                : false;
         }
         if (!provider || !isValid) {
             return res.status(401).json({ message: "Invalid credentials" });
@@ -151,10 +172,19 @@ router.post("/provider/login", async (req, res) => {
             providerType: provider.type,
             authorised: false,
         });
-        return res.json({ providerSessionToken, role: "provider", authorised: false });
+        return res.json({
+            providerSessionToken,
+            role: "provider",
+            authorised: false,
+        });
     }
     catch (error) {
-        return res.status(500).json({ message: "Provider login failed", error: error.message });
+        return res
+            .status(500)
+            .json({
+            message: "Provider login failed",
+            error: error.message,
+        });
     }
 });
 router.post("/provider/lookup-patient", async (req, res) => {
@@ -190,7 +220,9 @@ router.post("/provider/lookup-patient", async (req, res) => {
         });
     }
     catch (error) {
-        return res.status(500).json({ message: "Lookup failed", error: error.message });
+        return res
+            .status(500)
+            .json({ message: "Lookup failed", error: error.message });
     }
 });
 router.post("/provider/request-otp", async (req, res) => {
@@ -226,10 +258,13 @@ router.post("/provider/request-otp", async (req, res) => {
             otpSent: true,
             maskedPhone: maskedPhone(String(patient.phone)),
             expiresIn: Number(process.env.OTP_EXPIRY_MINUTES ?? "5") * 60,
+            devOtp: process.env.NODE_ENV === "production" ? null : (0, otpService_1.getLastDevOtp)(),
         });
     }
     catch (error) {
-        return res.status(500).json({ message: "OTP request failed", error: error.message });
+        return res
+            .status(500)
+            .json({ message: "OTP request failed", error: error.message });
     }
 });
 router.post("/provider/verify-otp", async (req, res) => {
@@ -239,12 +274,16 @@ router.post("/provider/verify-otp", async (req, res) => {
             return res.status(401).json({ message: "Missing authorization token" });
         }
         const payload = verifyToken(token);
-        if (payload.role !== "provider" || !payload.providerId || !payload.providerName) {
+        if (payload.role !== "provider" ||
+            !payload.providerId ||
+            !payload.providerName) {
             return res.status(403).json({ message: "Only provider session allowed" });
         }
         const { patientId, otp } = req.body;
         if (!patientId || !otp) {
-            return res.status(400).json({ message: "patientId and otp are required" });
+            return res
+                .status(400)
+                .json({ message: "patientId and otp are required" });
         }
         const verification = await (0, otpService_1.verifyOtp)(patientId, otp, "provider-access-consent");
         if (!verification.valid) {
@@ -254,7 +293,11 @@ router.post("/provider/verify-otp", async (req, res) => {
                 otp_invalid: "Invalid OTP",
                 otp_too_many_attempts: "OTP invalidated after 3 failed attempts",
             };
-            return res.status(401).json({ message: reasonMap[verification.reason ?? ""] ?? "OTP verification failed" });
+            return res
+                .status(401)
+                .json({
+                message: reasonMap[verification.reason ?? ""] ?? "OTP verification failed",
+            });
         }
         const consentRows = await (0, neo4j_1.runQuery)(`
       MATCH (:Patient {id: $patientId})-[:GRANTED_ACCESS_TO]->(c:ConsentToken)-[:AUTHORISES]->(:Provider {id: $providerId})
@@ -345,7 +388,12 @@ router.post("/provider/verify-otp", async (req, res) => {
         });
     }
     catch (error) {
-        return res.status(500).json({ message: "OTP verification failed", error: error.message });
+        return res
+            .status(500)
+            .json({
+            message: "OTP verification failed",
+            error: error.message,
+        });
     }
 });
 router.post("/logout", (_req, res) => {
@@ -361,11 +409,13 @@ router.get("/me", (req, res) => {
         return res.json(payload);
     }
     catch (error) {
-        return res.status(401).json({ message: "Invalid token", error: error.message });
+        return res
+            .status(401)
+            .json({ message: "Invalid token", error: error.message });
     }
 });
 router.get("/dev/last-otp", (_req, res) => {
-    if (process.env.NODE_ENV !== "development") {
+    if (process.env.NODE_ENV === "production") {
         return res.status(404).json({ message: "Not found" });
     }
     return res.json({ otp: (0, otpService_1.getLastDevOtp)() });
