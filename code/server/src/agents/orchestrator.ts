@@ -29,6 +29,14 @@ interface PipelineResult {
   failedAgents: string[];
 }
 
+interface RagRecord {
+  resourceType: unknown;
+  resourceId: unknown;
+  recordedAt: unknown;
+  sourceName: unknown;
+  payload: Record<string, unknown>;
+}
+
 function safeText(value: unknown, fallback = "Unknown"): string {
   return typeof value === "string" && value.trim().length > 0 ? value : fallback;
 }
@@ -194,6 +202,277 @@ function buildFallbackRisks(aggregated: Record<string, unknown>): Array<Record<s
       ];
 }
 
+function normalizeText(input: string): string {
+  return input.toLowerCase().replace(/[^a-z0-9\s]/g, " ");
+}
+
+function tokenize(input: string): string[] {
+  return normalizeText(input)
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 1);
+}
+
+function levenshteinDistance(left: string, right: string): number {
+  if (left === right) {
+    return 0;
+  }
+  if (left.length === 0) {
+    return right.length;
+  }
+  if (right.length === 0) {
+    return left.length;
+  }
+
+  const previousRow: number[] = Array.from({ length: right.length + 1 }, (_value, index) => index);
+  let currentRow: number[] = Array.from({ length: right.length + 1 }, () => 0);
+
+  for (let row = 1; row <= left.length; row += 1) {
+    currentRow[0] = row;
+    for (let col = 1; col <= right.length; col += 1) {
+      const cost = left[row - 1] === right[col - 1] ? 0 : 1;
+      const deletion = previousRow[col] ?? Number.MAX_SAFE_INTEGER;
+      const insertion = currentRow[col - 1] ?? Number.MAX_SAFE_INTEGER;
+      const substitution = previousRow[col - 1] ?? Number.MAX_SAFE_INTEGER;
+      currentRow[col] = Math.min(deletion + 1, insertion + 1, substitution + cost);
+    }
+
+    for (let col = 0; col <= right.length; col += 1) {
+      previousRow[col] = currentRow[col] ?? previousRow[col] ?? 0;
+    }
+  }
+
+  return previousRow[right.length] ?? 0;
+}
+
+function approximatelyMatches(queryToken: string, candidateToken: string): boolean {
+  if (queryToken === candidateToken) {
+    return true;
+  }
+  if (queryToken.length < 4 || candidateToken.length < 4) {
+    return false;
+  }
+
+  const distance = levenshteinDistance(queryToken, candidateToken);
+  if (Math.max(queryToken.length, candidateToken.length) >= 8) {
+    return distance <= 2;
+  }
+  return distance <= 1;
+}
+
+const CARDIAC_KEYWORDS = [
+  "cardiac",
+  "cadiac",
+  "cardio",
+  "heart",
+  "coronary",
+  "cad",
+  "stent",
+  "ecg",
+  "ekg",
+  "echo",
+  "cardiopulmonary",
+  "ldl",
+];
+
+const REPORT_KEYWORDS = ["report", "scan", "result", "results", "imaging", "conclusion", "finding"];
+
+function containsApproxKeyword(tokens: string[], keywords: string[]): boolean {
+  return tokens.some((token) => keywords.some((keyword) => approximatelyMatches(token, keyword) || token.includes(keyword)));
+}
+
+function getRecordSummary(record: RagRecord): string {
+  const resourceType = String(record.resourceType ?? "");
+  const payload = record.payload;
+
+  if (resourceType === "Condition") {
+    const code = safeText((payload.code as Record<string, unknown> | undefined)?.text, "Condition");
+    const status = safeText((payload.clinicalStatus as Record<string, unknown> | undefined)?.text, safeText(payload.status, "active"));
+    return `${code} (${status})`;
+  }
+
+  if (resourceType === "DiagnosticReport") {
+    const code = safeText((payload.code as Record<string, unknown> | undefined)?.text, "Diagnostic report");
+    const conclusion = safeText(payload.conclusion, "No conclusion provided");
+    return `${code}: ${conclusion}`;
+  }
+
+  if (resourceType === "Observation") {
+    const code = safeText((payload.code as Record<string, unknown> | undefined)?.text, "Observation");
+    const quantity = payload.valueQuantity as Record<string, unknown> | undefined;
+    const valueText = quantity
+      ? `${String(quantity.value ?? "")} ${String(quantity.unit ?? "")}`.trim()
+      : safeText(payload.valueString, "No value");
+    const note = safeText((payload.note as Array<Record<string, unknown>> | undefined)?.[0]?.text, "");
+    return note ? `${code}: ${valueText}. Note: ${note}` : `${code}: ${valueText}`;
+  }
+
+  if (resourceType === "MedicationRequest") {
+    const medication = safeText((payload.medicationCodeableConcept as Record<string, unknown> | undefined)?.text, "Medication");
+    const dose = safeText((payload.dosageInstruction as Array<Record<string, unknown>> | undefined)?.[0]?.text, "No dose");
+    return `${medication} (${dose})`;
+  }
+
+  if (resourceType === "AllergyIntolerance") {
+    const allergy = safeText((payload.code as Record<string, unknown> | undefined)?.text, "Allergy");
+    const reaction = safeText((payload.reaction as Array<Record<string, unknown>> | undefined)?.[0]?.description, "No reaction details");
+    return `${allergy}: ${reaction}`;
+  }
+
+  if (resourceType === "Procedure") {
+    return safeText((payload.code as Record<string, unknown> | undefined)?.text, "Procedure");
+  }
+
+  return JSON.stringify(payload).slice(0, 280);
+}
+
+function buildSearchTokens(record: RagRecord): string[] {
+  const payload = record.payload;
+  const textParts = [
+    String(record.resourceType ?? ""),
+    String(record.sourceName ?? ""),
+    safeText((payload.code as Record<string, unknown> | undefined)?.text, ""),
+    safeText((payload.medicationCodeableConcept as Record<string, unknown> | undefined)?.text, ""),
+    safeText(payload.conclusion, ""),
+    safeText(payload.valueString, ""),
+    safeText((payload.clinicalStatus as Record<string, unknown> | undefined)?.text, ""),
+    safeText((payload.reaction as Array<Record<string, unknown>> | undefined)?.[0]?.description, ""),
+    safeText((payload.note as Array<Record<string, unknown>> | undefined)?.[0]?.text, ""),
+    JSON.stringify(payload),
+  ];
+  return tokenize(textParts.join(" "));
+}
+
+function buildFallbackAnswer(question: string, relevant: Array<{ type: string; content: string }>): string {
+  if (relevant.length === 0) {
+    return `I could not find a direct match for "${question}" in the available records.`;
+  }
+
+  const diagnosticReports = relevant.filter((item) => item.type === "DiagnosticReport");
+  const conditions = relevant.filter((item) => item.type === "Condition");
+  const observations = relevant.filter((item) => item.type === "Observation");
+
+  if (diagnosticReports.length > 0) {
+    const topReport = diagnosticReports[0]?.content ?? "";
+    return `Based on the chart, the most relevant report is: ${topReport}`;
+  }
+
+  if (conditions.length > 0 || observations.length > 0) {
+    const conditionText = conditions.slice(0, 2).map((item) => item.content).join("; ");
+    const observationText = observations.slice(0, 2).map((item) => item.content).join("; ");
+    if (conditionText && observationText) {
+      return `Relevant findings: conditions - ${conditionText}. Related observations - ${observationText}.`;
+    }
+    return `Relevant findings: ${conditionText || observationText}.`;
+  }
+
+  return `I found relevant records for "${question}": ${relevant
+    .slice(0, 3)
+    .map((item) => item.content)
+    .join("; ")}.`;
+}
+
+function buildFallbackRagResponse(question: string, records: RagRecord[], ragError?: string): Record<string, unknown> {
+  const queryTokens = tokenize(question);
+  const queryIsCardiac = containsApproxKeyword(queryTokens, CARDIAC_KEYWORDS);
+  const queryRequestsReport = containsApproxKeyword(queryTokens, REPORT_KEYWORDS);
+
+  const scored = records
+    .map((record) => {
+      const recordTokens = buildSearchTokens(record);
+      const recordTokenSet = new Set(recordTokens);
+      let score = 0;
+
+      for (const token of queryTokens) {
+        if (recordTokenSet.has(token)) {
+          score += 3;
+          continue;
+        }
+        if (recordTokens.some((candidate) => approximatelyMatches(token, candidate))) {
+          score += 2;
+        }
+      }
+
+      if (queryIsCardiac && containsApproxKeyword(recordTokens, CARDIAC_KEYWORDS)) {
+        score += 4;
+      }
+
+      const resourceType = String(record.resourceType ?? "");
+      if (queryRequestsReport && resourceType === "DiagnosticReport") {
+        score += 3;
+      }
+
+      return { record, score };
+    })
+    .sort((left, right) => right.score - left.score);
+
+  let relevant = scored
+    .filter((entry) => entry.score > 0)
+    .slice(0, 6)
+    .map((entry) => ({
+      date: String(entry.record.recordedAt ?? ""),
+      source: String(entry.record.sourceName ?? "Unknown"),
+      type: String(entry.record.resourceType ?? "Unknown"),
+      content: getRecordSummary(entry.record),
+    }));
+
+  if (relevant.length === 0) {
+    const mostRecent = records.slice(-5).reverse();
+    for (const record of mostRecent) {
+      relevant.push({
+        date: String(record.recordedAt ?? ""),
+        source: String(record.sourceName ?? "Unknown"),
+        type: String(record.resourceType ?? "Unknown"),
+        content: getRecordSummary(record),
+      });
+    }
+  }
+
+  if (queryIsCardiac) {
+    const cardiacOnly = relevant.filter((item) =>
+      containsApproxKeyword(tokenize(`${item.type} ${item.content}`), CARDIAC_KEYWORDS)
+    );
+    if (cardiacOnly.length > 0) {
+      relevant = cardiacOnly.slice(0, 5);
+    }
+  }
+
+  const caveat = ragError
+    ? `Generated from deterministic fallback because model output failed: ${ragError}`
+    : "Generated from deterministic fallback.";
+
+  return {
+    answer: buildFallbackAnswer(question, relevant),
+    relevantRecords: relevant,
+    confidence: relevant.length >= 3 ? "high" : relevant.length > 0 ? "medium" : "low",
+    caveat,
+  };
+}
+
+function normalizeRagOutput(output: Record<string, unknown>, fallbackCaveat?: string): Record<string, unknown> {
+  const confidence = output.confidence;
+  const normalizedConfidence =
+    confidence === "high" || confidence === "medium" || confidence === "low" ? confidence : "medium";
+
+  const relevantRecords = Array.isArray(output.relevantRecords) ? output.relevantRecords : [];
+  const answer =
+    typeof output.answer === "string" && output.answer.trim().length > 0
+      ? output.answer
+      : "Relevant records were found. Please review the cited entries.";
+  const caveat =
+    typeof output.caveat === "string" && output.caveat.trim().length > 0
+      ? output.caveat
+      : fallbackCaveat ?? "Response normalized from model output.";
+
+  return {
+    ...output,
+    answer,
+    confidence: normalizedConfidence,
+    relevantRecords,
+    caveat,
+  };
+}
+
 async function storeAgentOutput(
   patientId: string,
   agentName: string,
@@ -301,19 +580,25 @@ export class AgentOrchestrator {
       { patientId }
     );
 
+    const records: RagRecord[] = rows.map((row) => ({
+      resourceType: row.r.resourceType,
+      resourceId: row.r.resourceId,
+      recordedAt: row.r.recordedAt,
+      sourceName: row.s.sourceName,
+      payload: JSON.parse(String(row.r.payload)) as Record<string, unknown>,
+    }));
+
     const payload = {
       question,
-      records: rows.map((row) => ({
-        resourceType: row.r.resourceType,
-        resourceId: row.r.resourceId,
-        recordedAt: row.r.recordedAt,
-        sourceName: row.s.sourceName,
-        payload: JSON.parse(String(row.r.payload)) as Record<string, unknown>,
-      })),
+      records,
     };
 
     const ragResult = await this.ragMemory.run(payload);
-    const output = ragResult.data ?? { error: ragResult.error ?? "rag_failed" };
+    const ragData = ragResult.data as Record<string, unknown> | null;
+    const hasUsableAnswer = typeof ragData?.answer === "string" && ragData.answer.trim().length > 0;
+    const output = hasUsableAnswer
+      ? normalizeRagOutput(ragData, ragResult.error ? `Model warning: ${ragResult.error}` : undefined)
+      : buildFallbackRagResponse(question, records, ragResult.error);
     await storeAgentOutput(patientId, "ragMemory", output, ragResult.tokensUsed);
     return output;
   }

@@ -140,7 +140,6 @@ export default function ClinicianDashboard(): JSX.Element {
                 <div className="mb-2 flex items-center gap-2">
                   <h3 className="text-lg font-semibold text-slate-900">AI Summary</h3>
                   <Badge label="AI Generated" tone="info" />
-                  <Badge label="claude-sonnet-4-20250514" tone="default" />
                 </div>
                 <p className="text-sm text-slate-700">{String(pipeline?.synthesis?.patientOverview ?? "No synthesis available.")}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
