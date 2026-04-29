@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # MedMemory OS
 
 **Tagline:** The AI brain for fragmented health records
@@ -118,6 +117,70 @@ npm run dev
 - Client: `http://localhost:5173`
 - API: `http://localhost:3001`
 
+## Running the app
+
+### Option A: one command startup (recommended on Windows)
+```powershell
+.\start.bat
+```
+This script:
+- Starts Neo4j first
+- Waits until Neo4j is reachable
+- Starts backend API
+- Starts frontend
+
+### Option B: Docker Compose (all services together)
+```bash
+docker compose up --build
+```
+Services:
+- Neo4j: `http://localhost:7474` and `bolt://localhost:7687`
+- API: `http://localhost:3001`
+- Frontend: `http://localhost:5173`
+
+### Option C: manual startup
+
+1. Start Neo4j
+```bash
+docker run --name medmemory-neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/medmemory123 -e NEO4J_PLUGINS='["apoc"]' neo4j:5
+```
+
+2. Start backend
+```powershell
+cd code/server
+Copy-Item .env.example .env -ErrorAction SilentlyContinue
+npm install
+npm run dev
+```
+
+3. Start frontend
+```powershell
+cd code/client
+Copy-Item .env.example .env -ErrorAction SilentlyContinue
+npm install
+npm run dev
+```
+
+### Verify everything is working
+
+1. API health:
+```bash
+curl http://localhost:3001/health
+```
+Expected: JSON with `"status":"ok"`.
+
+2. Dependency health:
+```bash
+curl http://localhost:3001/health/services
+```
+Expected:
+- `api.up: true`
+- `neo4j.up: true`
+
+3. Open frontend:
+- `http://localhost:5173`
+- The app now auto-checks API and Neo4j on load, retries every 10 seconds, and offers a Retry button.
+
 ## 6) Agent Pipeline
 
 Implemented in `server/src/agents/`:
@@ -199,6 +262,3 @@ Records are stored as full JSON payload strings in Neo4j, preserving schema fide
 ---
 
 Built for hackathon speed with production-minded architecture boundaries.
-=======
-# Med-Memory
->>>>>>> 860a0f9f9ebb00780ee05ba08ca6d5eb2683c3b9

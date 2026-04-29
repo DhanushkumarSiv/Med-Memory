@@ -8,6 +8,8 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace code/server\" \"npm run dev --workspace code/client\"",
+    "dev:all": "docker compose up --build",
+    "dev:stack": "start.bat",
     "dev:server": "npm run dev --workspace code/server",
     "dev:client": "npm run dev --workspace code/client",
     "build": "npm run build --workspace code/server && npm run build --workspace code/client",

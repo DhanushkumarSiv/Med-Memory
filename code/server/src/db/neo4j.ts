@@ -75,3 +75,13 @@ export async function closeDriver(): Promise<void> {
     driver = undefined;
   }
 }
+
+export async function checkNeo4jHealth(): Promise<{ up: boolean; error?: string }> {
+  try {
+    await getDriver().verifyConnectivity();
+    await runQuery("RETURN 1 AS ok");
+    return { up: true };
+  } catch (error) {
+    return { up: false, error: (error as Error).message };
+  }
+}

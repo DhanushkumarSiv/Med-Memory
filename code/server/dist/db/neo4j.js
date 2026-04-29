@@ -7,6 +7,7 @@ exports.getDriver = getDriver;
 exports.runQuery = runQuery;
 exports.initConstraints = initConstraints;
 exports.closeDriver = closeDriver;
+exports.checkNeo4jHealth = checkNeo4jHealth;
 const neo4j_driver_1 = __importDefault(require("neo4j-driver"));
 let driver;
 function toNative(value) {
@@ -66,5 +67,15 @@ async function closeDriver() {
     if (driver) {
         await driver.close();
         driver = undefined;
+    }
+}
+async function checkNeo4jHealth() {
+    try {
+        await getDriver().verifyConnectivity();
+        await runQuery("RETURN 1 AS ok");
+        return { up: true };
+    }
+    catch (error) {
+        return { up: false, error: error.message };
     }
 }
