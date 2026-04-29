@@ -182,29 +182,80 @@ export default function Login(): JSX.Element {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 sm:p-8">
-      <div className="mx-auto max-w-3xl space-y-6">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-slate-900">MedMemory OS</h1>
-          <p className="text-slate-600">The AI brain for fragmented health records</p>
-        </div>
+    <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,#EFF6FF_0%,#F8FAFC_52%,#F1F5F9_100%)]">
+      <div className="pointer-events-none absolute -left-24 -top-20 h-80 w-80 rounded-full bg-blue-200/30 blur-3xl" />
+      <div className="pointer-events-none absolute -right-28 top-10 h-96 w-96 rounded-full bg-cyan-200/25 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-24 left-1/3 h-80 w-80 rounded-full bg-teal-200/20 blur-3xl" />
 
-        {error && <Alert message={error} severity="critical" />}
+      <div className="relative mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-4 sm:px-8 sm:py-6">
+        <nav className="mb-6 flex items-center justify-between rounded-xl border border-slate-200/70 bg-white/70 px-4 py-3 backdrop-blur sm:px-6">
+          <span className="text-sm font-semibold text-[#0F172A] sm:text-base">MedMemory OS</span>
+          <button type="button" className="text-xs font-medium text-[#64748B] transition hover:text-[#334155]">
+            Help
+          </button>
+        </nav>
 
-        {!role && (
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card className="cursor-pointer" onClick={() => setRole("patient")}>
-              <h2 className="text-xl font-semibold text-slate-900">I am a Patient</h2>
-              <p className="mt-2 text-sm text-slate-600">Access my own consolidated records.</p>
-            </Card>
-            <Card className="cursor-pointer" onClick={() => setRole("provider")}>
-              <h2 className="text-xl font-semibold text-slate-900">I am a Provider (Doctor / Specialist)</h2>
-              <p className="mt-2 text-sm text-slate-600">Access records with patient OTP consent.</p>
-            </Card>
-          </div>
-        )}
+        <main className="flex flex-1 items-center justify-center">
+          <div className={`w-full ${role ? "max-w-3xl" : "max-w-5xl"}`}>
+            {error && <Alert message={error} severity="critical" />}
 
-        {role === "patient" && (
+            {!role && (
+              <div className="space-y-8">
+                <div className="text-center">
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-100 bg-white shadow-sm">
+                    <svg viewBox="0 0 24 24" className="h-8 w-8 text-[#2563EB]" fill="none" stroke="currentColor" strokeWidth="1.8">
+                      <path d="M12 20S4 15.2 4 9.4C4 6.5 6.3 4.2 9.2 4.2C10.8 4.2 12 5 12.8 6.2C13.6 5 14.8 4.2 16.4 4.2C19.3 4.2 21.6 6.5 21.6 9.4C21.6 15.2 13.6 20 12 20Z" />
+                      <path d="M8 12H10.2L11.4 9.8L13 14.2L14.1 12.8H16.6" />
+                    </svg>
+                  </div>
+                  <h1 className="text-[2rem] font-bold text-[#0F172A] sm:text-[2.5rem]">MedMemory OS</h1>
+                  <p className="mt-2 text-sm text-[#64748B] sm:text-base">The AI brain for fragmented health records</p>
+                  <p className="mt-2 text-[11px] text-slate-500 sm:text-xs">
+                    🔒 ABDM compliant · End-to-end encrypted · Consent-based access
+                  </p>
+                </div>
+
+                <div className="grid gap-5 sm:gap-6 md:grid-cols-2">
+                  <Card
+                    className="group relative flex min-h-[220px] cursor-pointer flex-col overflow-hidden rounded-2xl border-[0.5px] border-slate-200 bg-white p-6 transition-all duration-200 ease-in-out hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(0,0,0,0.10)] hover:border-[#2563EB]/50"
+                    onClick={() => setRole("patient")}
+                  >
+                    <div className="absolute inset-x-0 top-0 h-1 bg-[#2563EB]" />
+                    <div className="mt-2 mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-blue-50 text-[#2563EB]">
+                      <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="1.8">
+                        <circle cx="12" cy="8" r="3.7" />
+                        <path d="M5.5 19.5C5.5 16.1 8.3 13.7 12 13.7C15.7 13.7 18.5 16.1 18.5 19.5" />
+                      </svg>
+                    </div>
+                    <h2 className="text-[1.2rem] font-semibold text-[#0F172A]">I am a Patient</h2>
+                    <p className="mt-2 text-sm text-slate-500">Access my own consolidated records.</p>
+                    <p className="mt-auto pt-8 text-right text-sm font-semibold text-[#2563EB]">Continue →</p>
+                  </Card>
+
+                  <Card
+                    className="group relative flex min-h-[220px] cursor-pointer flex-col overflow-hidden rounded-2xl border-[0.5px] border-slate-200 bg-white p-6 transition-all duration-200 ease-in-out hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(0,0,0,0.10)] hover:border-[#0D9488]/50"
+                    onClick={() => setRole("provider")}
+                  >
+                    <div className="absolute inset-x-0 top-0 h-1 bg-[#0D9488]" />
+                    <div className="mt-2 mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-teal-50 text-[#0D9488]">
+                      <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="1.8">
+                        <path d="M8.5 4.5H15.5V11.5H8.5Z" />
+                        <path d="M12 2.8V6.3" />
+                        <path d="M12 9.7V13.2" />
+                        <path d="M6.8 8H10.3" />
+                        <path d="M13.7 8H17.2" />
+                        <path d="M13.5 13.5L20.5 20.5" />
+                      </svg>
+                    </div>
+                    <h2 className="text-[1.2rem] font-semibold text-[#0F172A]">I am a Provider (Doctor / Specialist)</h2>
+                    <p className="mt-2 text-sm text-slate-500">Access records with patient OTP consent.</p>
+                    <p className="mt-auto pt-8 text-right text-sm font-semibold text-[#0D9488]">Continue →</p>
+                  </Card>
+                </div>
+              </div>
+            )}
+
+            {role === "patient" && (
           <Card>
             <h2 className="mb-4 text-lg font-semibold text-slate-900">Patient login</h2>
             <form className="space-y-3" onSubmit={(event) => void onPatientLogin(event)}>
@@ -241,9 +292,9 @@ export default function Login(): JSX.Element {
               </div>
             </form>
           </Card>
-        )}
+            )}
 
-        {role === "provider" && (
+            {role === "provider" && (
           <Card>
             <div className="mb-4 flex items-center gap-2">
               {[1, 2, 3, 4].map((step) => (
@@ -343,6 +394,14 @@ export default function Login(): JSX.Element {
               </div>
             )}
           </Card>
+            )}
+          </div>
+        </main>
+
+        {!role && (
+          <footer className="pt-6 text-center text-[11px] text-[#94A3B8]">
+            MedMemory OS · Secure Health Intelligence Platform · v1.0
+          </footer>
         )}
       </div>
     </div>
