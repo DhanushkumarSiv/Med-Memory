@@ -46,19 +46,24 @@ app.use("/api/v1/consent", authMiddleware_1.authMiddleware, consent_1.default);
 app.use("/api/v1/audit", authMiddleware_1.authMiddleware, audit_1.default);
 app.use("/api/v1/agents", authMiddleware_1.authMiddleware, agents_1.default);
 async function start() {
+    let startupWarning = null;
     try {
         await (0, neo4j_1.initConstraints)();
         await (0, seed_1.seedGraph)();
-        const port = Number(process.env.PORT ?? 3001);
-        app.listen(port, () => {
-            // eslint-disable-next-line no-console
-            console.log(`MedMemory server running on port ${port}`);
-        });
     }
     catch (error) {
+        startupWarning = error.message;
         // eslint-disable-next-line no-console
-        console.error("Server startup failed", error);
-        process.exit(1);
+        console.error("Neo4j bootstrap failed. Starting API in degraded mode.", error);
     }
+    const port = Number(process.env.PORT ?? 3001);
+    app.listen(port, () => {
+        // eslint-disable-next-line no-console
+        console.log(`MedMemory server running on port ${port}`);
+        if (startupWarning) {
+            // eslint-disable-next-line no-console
+            console.warn(`Startup warning: ${startupWarning}`);
+        }
+    });
 }
 void start();
